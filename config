@@ -1,0 +1,13 @@
+ngx_addon_name=ngx_http_lmdb_module
+HTTP_MODULES="$HTTP_MODULES ngx_http_lmdb_module"
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_http_lmdb_module.c"
+
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/src/ngx_http_lmdb_module.h"
+
+CORE_INCS="$CORE_INCS $LMDB_INC"
+
+CORE_LIBS="$CORE_LIBS -L$LMDB_LIB -llmdb"
+
+#CORE_INCS="$CORE_INCS /usr/local/include"
+
+#CORE_LIBS="$CORE_LIBS -L/usr/local/lib -llmdb"
