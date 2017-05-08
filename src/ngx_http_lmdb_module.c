@@ -318,8 +318,14 @@ ngx_http_lmdb_read_content_handler(ngx_http_request_t *r)
 
     }
 
+    ngx_str_t key;
+    if (NGX_OK != ngx_http_arg(r, (u_char *)"key", 3, &key)) {
+        return NGX_HTTP_BAD_REQUEST;
+    }
+
     llcf->lmdb_query.key.mv_size = sizeof(int);
-    llcf->lmdb_query.key.mv_data = "020 3141592 foo bar";
+    llcf->lmdb_query.key.mv_data = key.data;
+    //llcf->lmdb_query.key.mv_data = "020 3141592 foo bar";
 
     l_rc = mdb_get(txn, dbi, &(llcf->lmdb_query.key), &(llcf->lmdb_query.value));
 
