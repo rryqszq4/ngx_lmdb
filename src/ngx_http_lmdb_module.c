@@ -323,13 +323,13 @@ ngx_http_lmdb_read_content_handler(ngx_http_request_t *r)
         return NGX_HTTP_BAD_REQUEST;
     }
 
-    llcf->lmdb_query.key.mv_size = sizeof(int);
+    llcf->lmdb_query.key.mv_size = key.len;
     llcf->lmdb_query.key.mv_data = key.data;
     //llcf->lmdb_query.key.mv_data = "020 3141592 foo bar";
 
     l_rc = mdb_get(txn, dbi, &(llcf->lmdb_query.key), &(llcf->lmdb_query.value));
 
-    //ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
 
     //ngx_http_lmdb_echo(r, (char *)llcf->lmdb_database.data, llcf->lmdb_database.len);
 
@@ -373,6 +373,107 @@ ngx_http_lmdb_read_content_handler(ngx_http_request_t *r)
 ngx_int_t 
 ngx_http_lmdb_write_content_handler(ngx_http_request_t *r)
 {
+    ngx_http_lmdb_rputs_chain_list_t *chain = NULL;
+    ngx_int_t rc;
+    ngx_http_lmdb_loc_conf_t *llcf;
+    ngx_http_lmdb_ctx_t *ctx;
+
+    int l_rc;
+    MDB_env *env;
+    MDB_dbi dbi;
+    MDB_txn *txn;
+    //MDB_val *data = NULL;
+
+    llcf = ngx_http_get_module_loc_conf(r, ngx_http_lmdb_module);
+    ctx = ngx_http_get_module_ctx(r, ngx_http_lmdb_module);
+
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(r->pool, sizeof(*ctx));
+        if (ctx == NULL) {
+            return NGX_ERROR;
+        }
+    }
+
+    ctx->request_body_more = 1;
+    ngx_http_set_ctx(r, ctx, ngx_http_lmdb_module);
+
+    ngx_lmdb_request = r;
+
+    /* lmdb */
+    l_rc = mdb_env_create(&env);
+    l_rc = mdb_env_set_maxreaders(env, 1);
+    l_rc = mdb_env_set_mapsize(env, 10485760);
+    l_rc = mdb_env_set_maxdbs(env, 4);
+    l_rc = mdb_env_open(env, (char *)llcf->lmdb_database.data, 0, 0664);
+
+    l_rc = mdb_txn_begin(env, NULL, 0, &txn);
+    l_rc = mdb_dbi_open(txn, NULL, 0, &dbi);
+
+    if (l_rc) {
+
+    }
+
+    ngx_str_t key;
+    ngx_str_t value;
+
+    if (NGX_OK != ngx_http_arg(r, (u_char *)"key", 3, &key)) {
+        return NGX_HTTP_BAD_REQUEST;
+    }
+
+    if (NGX_OK != ngx_http_arg(r, (u_char *)"value", 5, &value)) {
+        return NGX_HTTP_BAD_REQUEST;
+    }
+
+    llcf->lmdb_query.key.mv_size = key.len;
+    llcf->lmdb_query.key.mv_data = key.data;
+    llcf->lmdb_query.value.mv_size = value.len;
+    llcf->lmdb_query.value.mv_data = value.data;
+
+    //llcf->lmdb_query.key.mv_data = "020 3141592 foo bar";
+
+    l_rc = mdb_put(txn, dbi, &(llcf->lmdb_query.key), &(llcf->lmdb_query.value), MDB_NOOVERWRITE);
+
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+
+    l_rc = mdb_txn_commit(txn);
+
+    //ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+
+    //ngx_http_lmdb_echo(r, (char *)llcf->lmdb_database.data, llcf->lmdb_database.len);
+
+    ngx_http_lmdb_echo(r, (char *)" ", 1);
+
+
+    mdb_dbi_close(env, dbi);
+    mdb_env_close(env);
+
+    ctx = ngx_http_get_module_ctx(r, ngx_http_lmdb_module);
+    chain = ctx->rputs_chain;
+
+    if (!r->headers_out.status){
+        r->headers_out.status = NGX_HTTP_OK;
+    }
+
+    if (r->method == NGX_HTTP_HEAD){
+        rc = ngx_http_send_header(r);
+        if (rc != NGX_OK){
+            return rc;
+        }
+    }
+
+    if (chain != NULL){
+        (*chain->last)->buf->last_buf = 1;
+    }
+
+    rc = ngx_http_send_header(r);
+    if (rc != NGX_OK){
+        return rc;
+    }
+
+    ngx_http_output_filter(r, chain->out);
+
+    ngx_http_set_ctx(r, NULL, ngx_http_lmdb_module);
+
     return NGX_OK;
 }
 
