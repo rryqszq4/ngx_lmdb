@@ -29,12 +29,12 @@ static void *ngx_http_lmdb_create_loc_conf(ngx_conf_t *cf);
 static char *ngx_http_lmdb_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
 char *ngx_http_lmdb_database(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-char *ngx_http_lmdb_read_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-char *ngx_http_lmdb_write_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+char *ngx_http_lmdb_get_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+char *ngx_http_lmdb_put_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 ngx_int_t ngx_http_lmdb_content_handler(ngx_http_request_t *r);
-ngx_int_t ngx_http_lmdb_read_content_handler(ngx_http_request_t *r);
-ngx_int_t ngx_http_lmdb_write_content_handler(ngx_http_request_t *r);
+ngx_int_t ngx_http_lmdb_get_content_handler(ngx_http_request_t *r);
+ngx_int_t ngx_http_lmdb_put_content_handler(ngx_http_request_t *r);
 
 void ngx_http_lmdb_echo(ngx_http_request_t *r, char *data, size_t len);
 
@@ -49,22 +49,22 @@ static ngx_command_t ngx_http_lmdb_commands[] = {
      NULL
     },
 
-    {ngx_string("lmdb_read"),
+    {ngx_string("lmdb_get"),
      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LIF_CONF
          |NGX_CONF_NOARGS,
-     ngx_http_lmdb_read_content_phase,
+     ngx_http_lmdb_get_content_phase,
      NGX_HTTP_LOC_CONF_OFFSET,
      0,
-     ngx_http_lmdb_read_content_handler
+     ngx_http_lmdb_get_content_handler
     },
 
-    {ngx_string("lmdb_write"),
+    {ngx_string("lmdb_put"),
      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LIF_CONF
          |NGX_CONF_NOARGS,
-     ngx_http_lmdb_write_content_phase,
+     ngx_http_lmdb_put_content_phase,
      NGX_HTTP_LOC_CONF_OFFSET,
      0,
-     ngx_http_lmdb_write_content_handler
+     ngx_http_lmdb_put_content_handler
     },
 
     ngx_null_command
@@ -219,7 +219,7 @@ ngx_http_lmdb_database(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 char *
-ngx_http_lmdb_read_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_lmdb_get_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_lmdb_main_conf_t *lmcf;
     ngx_http_lmdb_loc_conf_t *llcf;
@@ -242,7 +242,7 @@ ngx_http_lmdb_read_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 
 char *
-ngx_http_lmdb_write_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ngx_http_lmdb_put_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_lmdb_main_conf_t *lmcf;
     ngx_http_lmdb_loc_conf_t *llcf;
@@ -276,7 +276,7 @@ ngx_http_lmdb_content_handler(ngx_http_request_t *r)
 }
 
 ngx_int_t 
-ngx_http_lmdb_read_content_handler(ngx_http_request_t *r)
+ngx_http_lmdb_get_content_handler(ngx_http_request_t *r)
 {
     ngx_http_lmdb_rputs_chain_list_t *chain = NULL;
     ngx_int_t rc;
@@ -371,7 +371,7 @@ ngx_http_lmdb_read_content_handler(ngx_http_request_t *r)
 }
 
 ngx_int_t 
-ngx_http_lmdb_write_content_handler(ngx_http_request_t *r)
+ngx_http_lmdb_put_content_handler(ngx_http_request_t *r)
 {
     ngx_http_lmdb_rputs_chain_list_t *chain = NULL;
     ngx_int_t rc;
