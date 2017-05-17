@@ -31,10 +31,12 @@ static char *ngx_http_lmdb_merge_loc_conf(ngx_conf_t *cf, void *parent, void *ch
 char *ngx_http_lmdb_database(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 char *ngx_http_lmdb_get_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 char *ngx_http_lmdb_put_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+char *ngx_http_lmdb_del_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 ngx_int_t ngx_http_lmdb_content_handler(ngx_http_request_t *r);
 ngx_int_t ngx_http_lmdb_get_content_handler(ngx_http_request_t *r);
 ngx_int_t ngx_http_lmdb_put_content_handler(ngx_http_request_t *r);
+ngx_int_t ngx_http_lmdb_del_content_handler(ngx_http_request_t *r);
 
 void ngx_http_lmdb_echo(ngx_http_request_t *r, char *data, size_t len);
 
@@ -65,6 +67,15 @@ static ngx_command_t ngx_http_lmdb_commands[] = {
      NGX_HTTP_LOC_CONF_OFFSET,
      0,
      ngx_http_lmdb_put_content_handler
+    },
+
+    {ngx_string("lmdb_del"),
+     NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_HTTP_LIF_CONF
+         |NGX_CONF_NOARGS,
+     ngx_http_lmdb_del_content_phase,
+     NGX_HTTP_LOC_CONF_OFFSET,
+     0,
+     ngx_http_lmdb_del_content_handler
     },
 
     ngx_null_command
@@ -264,6 +275,29 @@ ngx_http_lmdb_put_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     return NGX_CONF_OK;
 }
 
+char *
+ngx_http_lmdb_del_content_phase(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_lmdb_main_conf_t *lmcf;
+    ngx_http_lmdb_loc_conf_t *llcf;
+
+    if (cmd->post == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    lmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_lmdb_module);
+    llcf = conf;
+
+    if (llcf->content_handler != NULL) {
+        return "is duplicated";
+    }
+
+    llcf->content_handler = cmd->post;
+    lmcf->enabled_content_handler = 1;
+
+    return NGX_CONF_OK;
+}
+
 ngx_int_t
 ngx_http_lmdb_content_handler(ngx_http_request_t *r)
 {
@@ -433,7 +467,106 @@ ngx_http_lmdb_put_content_handler(ngx_http_request_t *r)
 
     l_rc = mdb_put(txn, dbi, &(llcf->lmdb_query.key), &(llcf->lmdb_query.value), MDB_NOOVERWRITE);
 
-    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, value.len);
+
+    l_rc = mdb_txn_commit(txn);
+
+    //ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s %s %d", l_rc, mdb_strerror(l_rc), llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+
+    //ngx_http_lmdb_echo(r, (char *)llcf->lmdb_database.data, llcf->lmdb_database.len);
+
+    ngx_http_lmdb_echo(r, (char *)" ", 1);
+
+
+    mdb_dbi_close(env, dbi);
+    mdb_env_close(env);
+
+    ctx = ngx_http_get_module_ctx(r, ngx_http_lmdb_module);
+    chain = ctx->rputs_chain;
+
+    if (!r->headers_out.status){
+        r->headers_out.status = NGX_HTTP_OK;
+    }
+
+    if (r->method == NGX_HTTP_HEAD){
+        rc = ngx_http_send_header(r);
+        if (rc != NGX_OK){
+            return rc;
+        }
+    }
+
+    if (chain != NULL){
+        (*chain->last)->buf->last_buf = 1;
+    }
+
+    rc = ngx_http_send_header(r);
+    if (rc != NGX_OK){
+        return rc;
+    }
+
+    ngx_http_output_filter(r, chain->out);
+
+    ngx_http_set_ctx(r, NULL, ngx_http_lmdb_module);
+
+    return NGX_OK;
+}
+
+ngx_int_t 
+ngx_http_lmdb_del_content_handler(ngx_http_request_t *r)
+{
+    ngx_http_lmdb_rputs_chain_list_t *chain = NULL;
+    ngx_int_t rc;
+    ngx_http_lmdb_loc_conf_t *llcf;
+    ngx_http_lmdb_ctx_t *ctx;
+
+    int l_rc;
+    MDB_env *env;
+    MDB_dbi dbi;
+    MDB_txn *txn;
+    //MDB_val *data = NULL;
+
+    llcf = ngx_http_get_module_loc_conf(r, ngx_http_lmdb_module);
+    ctx = ngx_http_get_module_ctx(r, ngx_http_lmdb_module);
+
+    if (ctx == NULL) {
+        ctx = ngx_pcalloc(r->pool, sizeof(*ctx));
+        if (ctx == NULL) {
+            return NGX_ERROR;
+        }
+    }
+
+    ctx->request_body_more = 1;
+    ngx_http_set_ctx(r, ctx, ngx_http_lmdb_module);
+
+    ngx_lmdb_request = r;
+
+    /* lmdb */
+    l_rc = mdb_env_create(&env);
+    l_rc = mdb_env_set_maxreaders(env, 1);
+    l_rc = mdb_env_set_mapsize(env, 10485760);
+    l_rc = mdb_env_set_maxdbs(env, 4);
+    l_rc = mdb_env_open(env, (char *)llcf->lmdb_database.data, 0, 0664);
+
+    l_rc = mdb_txn_begin(env, NULL, 0, &txn);
+    l_rc = mdb_dbi_open(txn, NULL, 0, &dbi);
+
+    if (l_rc) {
+
+    }
+
+    ngx_str_t key;
+
+    if (NGX_OK != ngx_http_arg(r, (u_char *)"key", 3, &key)) {
+        return NGX_HTTP_BAD_REQUEST;
+    }
+
+    llcf->lmdb_query.key.mv_size = key.len;
+    llcf->lmdb_query.key.mv_data = key.data;
+
+    //mdb_del(txn, dbi, &key, NULL)
+    l_rc = mdb_del(txn, dbi, &(llcf->lmdb_query.key), NULL);
+
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%d %s", l_rc, mdb_strerror(l_rc));
 
     l_rc = mdb_txn_commit(txn);
 
