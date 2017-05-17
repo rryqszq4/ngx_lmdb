@@ -367,7 +367,7 @@ ngx_http_lmdb_get_content_handler(ngx_http_request_t *r)
 
     //ngx_http_lmdb_echo(r, (char *)llcf->lmdb_database.data, llcf->lmdb_database.len);
 
-    ngx_http_lmdb_echo(r, (char *)llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data));
+    ngx_http_lmdb_echo(r, (char *)llcf->lmdb_query.value.mv_data, strlen(llcf->lmdb_query.value.mv_data)-1);
 
 
     mdb_dbi_close(env, dbi);
